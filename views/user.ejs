@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chaotify</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<script src="./node-vibrant/dist/vibrant.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@geoapify/geocoder-autocomplete@1.2.3/dist/geocoder-autocomplete.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script src="./app.js"  type="module"></script>
+<script>
+    const socket = io();
+    socket.on('client_update_nearest',()=>{
+        update_nearest_users();
+    });
+
+    // client-side
+    socket.on("connect", () => {
+        get_current_song(); //this actually also finds nearest users as well        
+    });
+
+    socket.on("pause_playback", () =>{
+        pause_playback();
+    });
+
+    socket.on("resume_playback", () =>{
+        resume_playback();
+    });
+
+    socket.on("skip_song", async () =>{
+        skip_song();
+    });
+    
+    async function handlePlayClick(access_t){
+        //find out if song is active or not
+        const result = await fetch("https://api.spotify.com/v1/me/player", {
+            method: "GET", 
+            headers: {    Authorization: `Bearer ${access_t}` }
+        });
+        let data = await result.json();
+        const container = document.getElementById(access_t);
+        const play_btn = container.querySelector('.play-button');
+        if(data.is_playing==false){
+            //not playing so display pause button bc after this, it will change to playing
+            play_btn.src = "./buttons/pause.png";
+            socket.emit("resume_playback", access_t);
+        }
+        else{
+            // playing so display start button bc after this, it will change to not playing
+            play_btn.src = "./buttons/play.png";
+            //tell the user to pause
+            socket.emit("pause_playback", access_t);
+        }
+        
+    }                                    
+
+    async function handleSkipClick(access_t){
+        socket.emit("skip_song", access_t);
+    }
+
+    async function skip_song(){
+        let access_t = localStorage.getItem("access_token");
+        const result = await fetch("https://api.spotify.com/v1/me/player/next", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${access_t}` }
+        });
+        if (result.ok) {
+            // Call get_current_song() after the song is skipped successfully but wait 500ms
+            setTimeout(get_current_song, 500);
+        } else {
+            console.error('Failed to skip song:', result.status);
+            // Handle error if needed
+        }
+    }   
+
+    async function pause_playback(){
+        
+        let access_t = localStorage.getItem("access_token");
+        const result = await fetch("https://api.spotify.com/v1/me/player/pause", {
+            method: "PUT", 
+            headers: {    Authorization: `Bearer ${access_t}` }
+        });
+        let msg = await result.json();
+        if(msg.error.status==401){
+            get_new_token(msg);
+        }
+
+    }
+
+    async function resume_playback(){
+        let access_t = localStorage.getItem("access_token");
+        const result = await fetch("https://api.spotify.com/v1/me/player/play", {
+            method: "PUT", 
+            headers: {    Authorization: `Bearer ${access_t}` }
+        });
+        let msg = await result.json();
+        if(msg.error.status==401){
+            get_new_token(msg);
+        }
+    }
+
+
+</script>
+<body id="background">
+    <main>
+        <div class="container">
+            <div class="half left">
+                <h2>Currently Listening To</h2>
+                <div class="current-song">
+                    <!-- Content for currently listening to -->
+                    <img id="user_track_img" src="placeholder_image.png" alt="Placeholder Image">
+                    <h3 id="user_track_title" class="song-title">Song Title</h3>
+                    <p id="user_track_artist" class="artist">Artist</p>
+                </div>
+            </div>
+            <div class="half right">
+                <h2>Nearby Users' Songs</h2>
+                <div class="nearby-song">
+                    <!--will get filled with ejs-->
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    
+</body>
+</html>
